@@ -21,6 +21,8 @@ func RegisterRoutes(e *echo.Echo) {
 	todos := e.Group("todos")
 	todos.POST("", todoHandler.AddTodo)
     todos.GET("", todoHandler.GetTodos)
+    todos.PUT("", todoHandler.UpdateTodos)
+    todos.DELETE("", todoHandler.DeleteTodos)
 
 	todo := todos.Group("/:id")
 	todo.GET("", todoHandler.GetTodo)
