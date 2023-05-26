@@ -24,7 +24,7 @@ services:
     networks:
       - todo-sample-network
     healthcheck:
-      test: ["CMD", "pg_isready"] 
+      test: ["CMD", "pg_isready", "-U", "test", "-d", "todo-sample"] 
       interval: 10s
       timeout: 5s
       retries: 5
