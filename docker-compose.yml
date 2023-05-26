@@ -6,7 +6,9 @@ services:
       context: .
     container_name: todo-sample
     depends_on:
-      - todo-sample-database
+      todo-sample-database:
+        condition: service_healthy
+
     ports:
       - "1234:1234"
     networks:
@@ -21,6 +23,11 @@ services:
       - POSTGRES_DB=todo-sample
     networks:
       - todo-sample-network
+    healthcheck:
+      test: ["CMD", "pg_isready"] 
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 
 networks:
