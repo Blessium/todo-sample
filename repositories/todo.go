@@ -1,9 +1,16 @@
 package repositories
 
 import (
+	old_error "errors"
+	"github.com/blessium/todo-sample/database"
+	"github.com/blessium/todo-sample/errors"
 	"gorm.io/gorm"
-    "github.com/blessium/todo-sample/database"
 	"time"
+    "fmt"
+)
+
+var (
+	TodoRepositoryPath = "repository/todo.go"
 )
 
 type ITodoRepository interface {
@@ -57,87 +64,107 @@ func NewGormTodoRepository(db *gorm.DB) ITodoRepository {
 	}
 }
 
-func (r GormTodoRepository) AddTodo(todo Todo) (Todo, error) {
-    todo_db := todo.mapToGorm()
+func newErrInternalDB(op string, details error) error {
+    message := fmt.Sprintf("%s: internal database error", op)
+    return errors.NewError(TodoRepositoryPath, errors.ErrInternal, message, details)
+}
 
-    result := r.db.Create(&todo_db)
-    if result.Error != nil {
-        return todo, result.Error
-    }
+func (r GormTodoRepository) AddTodo(todo Todo) (Todo, error) {
+	todo_db := todo.mapToGorm()
+    fmt.Print(todo_db)
+
+	result := r.db.Create(&todo_db)
+	if result.Error != nil {
+        return todo, newErrInternalDB("addTodo", result.Error)
+	}
 
 	return mapFromGorm(todo_db), nil
 }
 
 func (r GormTodoRepository) UpdateTodo(id uint, todo Todo) (Todo, error) {
-    todo_db := todo.mapToGorm()
+	todo_db := todo.mapToGorm()
 
-    result := r.db.Save(&todo_db)
-    if result.Error != nil {
-        return todo, result.Error
-    }
+	_, err := r.GetTodo(id)
+    if err != nil {
+		return Todo{}, err
+	}
+
+	todo_db.ID = id
+
+	result := r.db.Save(&todo_db)
+	if result.Error != nil {
+        return todo, newErrInternalDB("updateTodo", result.Error)
+	}
 	return mapFromGorm(todo_db), nil
 }
 
 func (r GormTodoRepository) UpdateTodos(todos []Todo) ([]Todo, error) {
-    var todos_db []database.Todo
-    for _, todo := range todos {
-        todos_db = append(todos_db, todo.mapToGorm())
-    }
+	var todos_db []database.Todo
+	for _, todo := range todos {
+		todos_db = append(todos_db, todo.mapToGorm())
+	}
 
-    result := r.db.Save(&todos_db)
-    if result.Error != nil {
-        return todos, result.Error
-    }
+	result := r.db.Save(&todos_db)
+	if result.Error != nil {
+		return todos, newErrInternalDB("updateTodos", result.Error)
+	}
 
-    var todos_back []Todo
-    for _, todo := range todos_db {
-        todos_back = append(todos_back, mapFromGorm(todo)) 
-    }
+	var todos_back []Todo
+	for _, todo := range todos_db {
+		todos_back = append(todos_back, mapFromGorm(todo))
+	}
 
 	return todos_back, nil
 }
 
 func (r GormTodoRepository) GetTodo(id uint) (Todo, error) {
-    var todo_db database.Todo
-    todo_db.ID = id
+	var todo_db database.Todo
+	todo_db.ID = id
 
-    result := r.db.Take(&todo_db) 
-    if result.Error != nil {
-        return Todo{}, result.Error
-    }
+	result := r.db.Take(&todo_db)
+	if result.Error != nil {
+		if old_error.Is(result.Error, gorm.ErrRecordNotFound) {
+			return Todo{}, errors.NewError(TodoRepositoryPath, errors.ErrNotExist, "todo doesn't exist", result.Error)
+		}
+		return Todo{}, newErrInternalDB("getTodo", result.Error)
+	}
 
 	return mapFromGorm(todo_db), nil
 }
 
 func (r GormTodoRepository) GetTodos() ([]Todo, error) {
-    var todos_db []database.Todo
+	var todos_db []database.Todo
 
-    result := r.db.Find(&todos_db)
-    if result.Error != nil {
-        return nil, result.Error
-    }
+	result := r.db.Find(&todos_db)
+	if result.Error != nil {
+		return nil, newErrInternalDB("getTodos", result.Error)
+	}
 
-    var todos []Todo
-    for _, todo_db := range todos_db {
-        todos = append(todos, mapFromGorm(todo_db))
-    }
-
+	var todos []Todo
+	for _, todo_db := range todos_db {
+		todos = append(todos, mapFromGorm(todo_db))
+	}
 
 	return todos, nil
 }
 
 func (r GormTodoRepository) DeleteTodo(id uint) error {
-    result := r.db.Delete(&database.Todo{ID : id}) 
-    if result.Error != nil {
-        return result.Error
+    _, err := r.GetTodo(id)
+    if err != nil {
+        return err
     }
+
+	result := r.db.Delete(&database.Todo{ID: id})
+	if result.Error != nil {
+		return newErrInternalDB("deleteTodo", result.Error)
+	}
 	return nil
 }
 
 func (r GormTodoRepository) DeleteTodos() error {
-    result := r.db.Where("1=1").Delete(&database.Todo{})
-    if result.Error != nil {
-        return result.Error
-    }
+	result := r.db.Where("1=1").Delete(&database.Todo{})
+	if result.Error != nil {
+		return newErrInternalDB("deleteTodos", result.Error)
+	}
 	return nil
 }

@@ -1,13 +1,13 @@
 package services
 
 import (
-	"errors"
+	"github.com/blessium/todo-sample/errors"
 	"github.com/blessium/todo-sample/repositories"
 	"time"
 )
 
 var (
-	InvalidTodoDateError = "todo: completition date is not valid"
+	ServiceTodoPath = "service/todo.go"
 )
 
 type Todo struct {
@@ -21,7 +21,7 @@ type Todo struct {
 
 func (t Todo) Validate() error {
 	if t.DueDate.Unix() < time.Now().Unix() {
-		return errors.New(InvalidTodoDateError)
+		return errors.NewError(ServiceTodoPath, errors.ErrValidation, "due_date is already expired", nil)
 	}
 	return nil
 }
@@ -72,9 +72,21 @@ func NewTodoService(t repositories.ITodoRepository) ITodoService {
 	}
 }
 
+func handleError(e error) error {
+	internErr := errors.NewError(ServiceTodoPath, errors.ErrInternal, "internal server error", nil)
+	// Non esporre i dettagli interni
+	if errors.IsType(e, errors.ErrInternal) {
+		return internErr
+	} else if errors.IsType(e, errors.ErrValidation) || errors.IsType(e, errors.ErrNotExist) {
+		return e
+	}
+
+	return nil
+}
+
 func (t TodoService) AddTodo(todo Todo) (Todo, error) {
 	if err := todo.Validate(); err != nil {
-		return todo, err
+		return todo, handleError(err)
 	}
 
 	todo.CreationDate = time.Now()
@@ -82,26 +94,30 @@ func (t TodoService) AddTodo(todo Todo) (Todo, error) {
 
 	todo_repo := todo.mapToRepo()
 
-    r_todo,  err := t.todoRepository.AddTodo(todo_repo); 
-    if err != nil {
-		return todo, err
+	r_todo, err := t.todoRepository.AddTodo(todo_repo)
+	if err != nil {
+		return todo, handleError(err)
 	}
 
 	return todoFromRepo(r_todo), nil
 }
 func (t TodoService) UpdateTodo(id uint, todo Todo) (Todo, error) {
 	if err := todo.Validate(); err != nil {
-		return todo, err
+		return todo, handleError(err)
 	}
+
+    if id == 0 {
+		return Todo{}, errors.NewError(ServiceTodoPath, errors.ErrValidation, "id cannot be 0", nil)
+    }
 
 	todo_repo := todo.mapToRepo()
 
-	_, err := t.todoRepository.UpdateTodo(id, todo_repo)
-    if err != nil {
-		return todo, err
+	res_todo, err := t.todoRepository.UpdateTodo(id, todo_repo)
+	if err != nil {
+		return todo, handleError(err)
 	}
 
-	return todo, nil
+	return todoFromRepo(res_todo), nil
 }
 
 func (t TodoService) UpdateTodos(todos []Todo) ([]Todo, error) {
@@ -110,24 +126,28 @@ func (t TodoService) UpdateTodos(todos []Todo) ([]Todo, error) {
 
 	for _, todo := range todos {
 		if err := todo.Validate(); err != nil {
-			return nil, err
+			return nil, handleError(err)
 		} else {
 			todos_repo = append(todos_repo, todo.mapToRepo())
 		}
 	}
 
 	_, err := t.todoRepository.UpdateTodos(todos_repo)
-    if err != nil {
-		return nil, err
+	if err != nil {
+		return nil, handleError(err)
 	}
 
 	return todos, nil
 }
 
 func (t TodoService) GetTodo(id uint) (Todo, error) {
+	if id == 0 {
+		return Todo{}, errors.NewError(ServiceTodoPath, errors.ErrValidation, "id cannot be 0", nil)
+	}
+
 	todo_repo, err := t.todoRepository.GetTodo(id)
 	if err != nil {
-		return Todo{}, err
+		return Todo{}, handleError(err)
 	}
 
 	todo := todoFromRepo(todo_repo)
@@ -138,7 +158,7 @@ func (t TodoService) GetTodo(id uint) (Todo, error) {
 func (t TodoService) GetTodos() ([]Todo, error) {
 	todos_repo, err := t.todoRepository.GetTodos()
 	if err != nil {
-		return nil, err
+		return nil, handleError(err)
 	}
 
 	var todos []Todo
@@ -151,15 +171,18 @@ func (t TodoService) GetTodos() ([]Todo, error) {
 }
 
 func (t TodoService) DeleteTodo(id uint) error {
+	if id == 0 {
+		return errors.NewError(ServiceTodoPath, errors.ErrValidation, "id cannot be 0", nil)
+	}
 	if err := t.todoRepository.DeleteTodo(id); err != nil {
-		return err
+		return handleError(err)
 	}
 	return nil
 }
 
 func (t TodoService) DeleteTodos() error {
 	if err := t.todoRepository.DeleteTodos(); err != nil {
-		return err
+		return handleError(err)
 	}
 	return nil
 }
