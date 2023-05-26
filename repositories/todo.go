@@ -71,7 +71,6 @@ func newErrInternalDB(op string, details error) error {
 
 func (r GormTodoRepository) AddTodo(todo Todo) (Todo, error) {
 	todo_db := todo.mapToGorm()
-    fmt.Print(todo_db)
 
 	result := r.db.Create(&todo_db)
 	if result.Error != nil {
@@ -84,24 +83,32 @@ func (r GormTodoRepository) AddTodo(todo Todo) (Todo, error) {
 func (r GormTodoRepository) UpdateTodo(id uint, todo Todo) (Todo, error) {
 	todo_db := todo.mapToGorm()
 
-	_, err := r.GetTodo(id)
+	temp, err := r.GetTodo(id)
     if err != nil {
 		return Todo{}, err
 	}
 
 	todo_db.ID = id
+    todo_db.CreationDate = temp.CreationDate
 
 	result := r.db.Save(&todo_db)
 	if result.Error != nil {
         return todo, newErrInternalDB("updateTodo", result.Error)
 	}
+    fmt.Print(todo_db)
 	return mapFromGorm(todo_db), nil
 }
 
 func (r GormTodoRepository) UpdateTodos(todos []Todo) ([]Todo, error) {
 	var todos_db []database.Todo
 	for _, todo := range todos {
-		todos_db = append(todos_db, todo.mapToGorm())
+        temp, err := r.GetTodo(todo.ID)
+        if err != nil {
+            return nil, err
+        }
+        todo_to_add := todo.mapToGorm()
+        todo_to_add.CreationDate = temp.CreationDate // ovveride creation_date
+		todos_db = append(todos_db, todo_to_add)
 	}
 
 	result := r.db.Save(&todos_db)
@@ -112,6 +119,7 @@ func (r GormTodoRepository) UpdateTodos(todos []Todo) ([]Todo, error) {
 	var todos_back []Todo
 	for _, todo := range todos_db {
 		todos_back = append(todos_back, mapFromGorm(todo))
+        fmt.Print(todo)
 	}
 
 	return todos_back, nil

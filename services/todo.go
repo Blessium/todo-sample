@@ -132,10 +132,15 @@ func (t TodoService) UpdateTodos(todos []Todo) ([]Todo, error) {
 		}
 	}
 
-	_, err := t.todoRepository.UpdateTodos(todos_repo)
+	res_todos, err := t.todoRepository.UpdateTodos(todos_repo)
 	if err != nil {
 		return nil, handleError(err)
 	}
+
+    todos = todos[:0]
+    for _, todo := range res_todos {
+        todos = append(todos, todoFromRepo(todo))
+    }
 
 	return todos, nil
 }
